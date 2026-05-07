@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+
+log() {
+  echo "==> $*"
+}
+
+die() {
+  echo "ERROR: $*" >&2
+  exit 1
+}
+
+set -Eeo pipefail
+
+TMPDIR=$(mktemp -d) || die "Failed to create temp directory"
+
+trap 'die "Script failed at line $LINENO ($?)"' ERR
+trap 'rm -rf -- "$TMPDIR"' EXIT
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+if [[ ! -f /etc/arch-release ]]; then
+  die "This script is designed for Arch Linux only"
+fi
+
+if ((EUID == 0)); then
+  die "This script must not be run as root"
+fi
+
+echo "Checking for sudo access..."
+if ! sudo -Nnv >/dev/null 2>&1; then
+  sudo -v || die "It appears that you don't have sudo access"
+fi
+
+echo
+echo "🚀 Starting system setup..."
+echo "This may take a while, grab some coffee and let the script do its thing."
+read -sn 1 -p "Press any key to continue..."; echo
+
+sudo cp ./assets/pacman.conf /etc/pacman.conf
+# shellcheck disable=SC2046
+sudo sed -i 's/^#\?MAKEFLAGS=.*/MAKEFLAGS="-j'$(nproc)'"/' /etc/makepkg.conf
+
+log "Updating system..."
+sudo pacman -Syy --noconfirm archlinux-keyring >/dev/null
+sudo pacman -Su --noconfirm
+
+log "Installing core deps..."
+sudo pacman -S --noconfirm --needed git base-devel wget unzip jq
+
+if ! command -v yay >/dev/null; then
+  log "Installing yay..."
+  git clone -q --depth 1 https://aur.archlinux.org/yay-bin.git "$TMPDIR/yay-bin"
+  (cd "$TMPDIR/yay-bin" && makepkg -si --noconfirm) || die "Failed to install yay"
+fi
+
+log "Installing packages..."
+mapfile -t pkgs < <(grep -Ev '^#|^\s*$' ./assets/packagelist)
+sudo pacman -S --needed --noconfirm "${pkgs[@]}"
+
+mapfile -t aurpkgs < <(grep -Ev '^#|^\s*$' ./assets/aurlist)
+yay -S --needed --noconfirm "${aurpkgs[@]}"
+
+log "Enabling system services..."
+sudo systemctl -q enable keyd.service
+
+log "Installing GTK theme..."
+dir="$TMPDIR"/tokyonight-gtk
+git clone -q --depth 1 https://github.com/Fausto-Korpsvart/Tokyonight-GTK-Theme.git "$dir"
+mkdir -p ~/.{themes,icons}
+(
+  cd "$dir/themes" || exit 1
+  ./install.sh --color dark --tweaks storm --libadwaita
+  sed -i -e 's/oomox-//' ../icons/*/index.theme
+  cp -a ../icons/Tokyonight-Dark-Cyan ~/.icons
+  gtk-update-icon-cache ~/.icons/Tokyonight-Dark-Cyan 2>/dev/null || true
+) || die "Theme installation failed."
+
+log "Installing my beloved dotfiles..."
+sudo pacman -S --needed xdg-user-dirs
+xdg-user-dirs-update
+mkdir -p ~/.{config,cache} ~/.local/share ~/repos ~/Pictures/screenshots
+rm -f ~/.bashrc ~/.bash_{profile,history,logout}
+./install
+
+log "Setting up SSH key..."
+if ! command -v bw >/dev/null; then
+  wget -qO "$TMPDIR/bw.zip" "https://bitwarden.com/download/?app=cli&platform=linux"
+  sudo unzip -q "$TMPDIR/bw.zip" bw -d /usr/local/bin
+  sudo chmod +x /usr/local/bin/bw
+fi
+if ! bw login --check >/dev/null 2>&1; then
+  BW_SESSION=$(bw login --raw) || die "Failed to log in to Bitwarden"
+  export BW_SESSION
+elif ! bw unlock --check >/dev/null 2>&1; then
+  BW_SESSION=$(bw unlock --raw) || die "Failed to unlock Bitwarden vault"
+  export BW_SESSION
+fi
+bw sync --force
+mkdir -p ~/.ssh
+bw get item main-ssh-key | jq -r .sshKey.privateKey >~/.ssh/id_ed25519
+for host in github.com gitlab.com; do
+  ssh-keygen -F "$host" >/dev/null || ssh-keyscan -H "$host" >>~/.ssh/known_hosts
+done
+[ -f ~/.ssh/config ] || touch ~/.ssh/config
+grep -qxF "AddKeysToAgent yes" ~/.ssh/config || echo "AddKeysToAgent yes" >>~/.ssh/config
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/id_ed25519 ~/.ssh/config
+chmod 644 ~/.ssh/known_hosts
+
+if command -v asdf >/dev/null; then
+  log "Installing the latest Ruby version via asdf..."
+  if asdf plugin-list | grep -Fq ruby; then
+    asdf plugin update ruby
+  else
+    asdf plugin add ruby
+  fi
+  ruby_latest_version=$(asdf latest ruby)
+  if ! asdf list ruby | grep -Fq "$ruby_latest_version"; then
+    asdf install ruby "$ruby_latest_version"
+    asdf set -u ruby "$ruby_latest_version"
+    asdf reshim ruby
+  fi
+  gem update --system || true
+  bundle config --global jobs "$(nproc)" >/dev/null 2>&1 || true
+fi
+
+cat <<'EOF'
+
+✅ Setup complete!
+
+You may need to restart your computer for all changes to take effect.
+
+Have fun! :)
+EOF

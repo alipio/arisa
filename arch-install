@@ -1,0 +1,189 @@
+#!/bin/bash
+
+set -e
+
+DISK="/dev/sda"
+CRYPT_NAME="cryptroot"
+
+log() {
+  printf "==> %s\n" "$*"
+}
+
+die() {
+  printf "ERROR: %s\n" "$*" >&2
+  exit 1
+}
+
+ask() {
+  local prompt="$1"
+  local var="$2"
+  read -rp "$prompt: " "$var"
+}
+
+ask_password() {
+  local p1 p2
+  while true; do
+    read -rsp "Passphrase: " p1; echo
+    read -rsp "Confirm passphrase: " p2; echo
+    [[ "$p1" == "$p2" ]] && break
+    echo "Passphrases do not match."
+  done
+  _passphrase="$p1"
+}
+
+validate_username() {
+  [[ "$1" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "Invalid username"
+}
+
+validate_hostname() {
+  [[ "$1" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "Invalid hostname"
+}
+
+install_live() {
+  log "Setup questions"
+  ask "Username" _username
+  validate_username "$_username"
+
+  ask "Hostname" _hostname
+  validate_hostname "$_hostname"
+
+  ask_password
+
+  log "Checking network"
+  ping -c 3 google.com || die "Network unavailable"
+
+  log "Setting up NTP"
+  timedatectl set-ntp true
+
+  if command -v reflector >/dev/null; then
+    log "Updating mirror list"
+    reflector -c Brazil -a 6 --sort rate --save /etc/pacman.d/mirrorlist
+  fi
+
+  log "Partitioning disk"
+  sgdisk -og "$DISK"
+  sgdisk -n 1:0:+500M -t 1:ef00 "$DISK"
+  sgdisk -n 2:0:+4G -t 2:8200 "$DISK"
+  sgdisk -n 3:0:0 -t 3:8304 "$DISK"
+
+  partprobe "$DISK"
+
+  log "Formatting boot and setting up swap"
+  mkfs.fat -F32 "${DISK}1"
+  mkswap "${DISK}2"
+  swapon "${DISK}2"
+
+  log "Encrypting root"
+  echo -n "$_passphrase" | cryptsetup luksFormat "${DISK}3" -
+  echo -n "$_passphrase" | cryptsetup open "${DISK}3" "$CRYPT_NAME" -
+
+  log "Mounting partitions"
+  mkfs.ext4 -F "/dev/mapper/$CRYPT_NAME"
+  mount "/dev/mapper/$CRYPT_NAME" /mnt
+  mkdir -p /mnt/boot
+  mount "${DISK}1" /mnt/boot
+
+  log "Creating /etc/fstab"
+  mkdir -p /mnt/etc
+  genfstab -U /mnt >> /mnt/etc/fstab
+
+  log "Installing base system"
+  pacstrap /mnt base base-devel linux linux-headers linux-firmware networkmanager sudo vim
+
+  cp /etc/pacman.d/mirrorlist /mnt/etc/pacman.d/
+
+  log "Copying installer into new system"
+  cp "$0" /mnt/install-chroot.sh
+
+  log "Entering chroot environment"
+  arch-chroot /mnt /bin/bash ./install-chroot.sh "${DISK}3" "$_username" "$_hostname" \
+    "$_passphrase"
+
+  log "Done. Rebooting..."
+  rm /mnt/install-chroot.sh
+
+  set +e
+  umount -R /mnt 2>/dev/null
+  cryptsetup close "$CRYPT_NAME" 2>/dev/null
+  swapoff -a 2>/dev/null
+
+  reboot
+}
+
+install_chroot() {
+  local rootpart=$1
+  local username=$2
+  local hostname=$3
+  local passphrase=$4
+
+  log "Setting up localtime"
+  ln -sf /usr/share/zoneinfo/America/Sao_Paulo /etc/localtime
+  hwclock --systohc
+
+  log "Setting up locale"
+  sed -i 's/^#en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen
+  locale-gen
+  echo "LANG=en_US.UTF-8" > /etc/locale.conf
+
+  log "Setting up hostname"
+  echo "$hostname" > /etc/hostname
+
+  log "Preparing ramdisks for kernel boot"
+  sed -i '/^HOOKS=/s/filesystems/encrypt filesystems/' /etc/mkinitcpio.conf
+  mkinitcpio -P
+
+  log "Setting up users"
+  echo "root:$passphrase" | chpasswd
+  useradd -m -g users -G wheel "$username"
+  echo "$username:$passphrase" | chpasswd
+  echo "%wheel ALL=(ALL) ALL" > /etc/sudoers.d/wheel
+
+  log "Installing CPU microcode"
+  cpu_vendor=$(grep -m1 'vendor_id' /proc/cpuinfo | awk '{print $3}')
+  microcode_img=""
+  case "$cpu_vendor" in
+    GenuineIntel)
+      pacman -S --noconfirm intel-ucode
+      microcode_img="/intel-ucode.img"
+      ;;
+    AuthenticAMD)
+      pacman -S --noconfirm amd-ucode
+      microcode_img="/amd-ucode.img"
+      ;;
+    *)
+      log "Unknown CPU vendor, skipping microcode"
+      ;;
+  esac
+
+  log "Setting up boot"
+  bootctl install
+
+  mkdir -p /boot/loader/entries
+
+  cat > /boot/loader/loader.conf <<EOF
+default arch
+timeout 3
+EOF
+
+  initrd_lines="initrd  /initramfs-linux.img"
+  if [[ -n "$microcode_img" ]]; then
+    initrd_lines="initrd  $microcode_img"$'\n'"$initrd_lines"
+  fi
+
+  uuid=$(blkid -s UUID -o value "$rootpart")
+
+  cat > /boot/loader/entries/arch.conf <<EOF
+title   Arch Linux
+linux   /vmlinuz-linux
+$initrd_lines
+options cryptdevice=UUID=$uuid:$CRYPT_NAME root=/dev/mapper/$CRYPT_NAME rw
+EOF
+
+  systemctl enable NetworkManager
+}
+
+if test "$(basename "$0")" = "install-chroot"; then
+  install_chroot "$@"
+else
+  install_live
+fi
