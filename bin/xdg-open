@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# Custom (and improved) version of the xdg-open script.
+
+set -euo pipefail
+
+(( $# )) || { echo "need a parameter" >&2; exit 1; }
+
+arg=$1
+
+if [[ $arg == *://* ]]; then
+  proto=${arg%%://*}
+  proto=${proto,,}
+
+  case $proto in
+    http|https)
+      exec firefox "$arg"
+      ;;
+    *)
+      echo "xdg-open: no URL handler for '$proto://' ($arg)" >&2
+      exit 1
+      ;;
+  esac
+fi
+
+ext=${arg##*.}
+ext=${ext,,}
+
+case $ext in
+  html)
+    exec firefox "$arg"
+    ;;
+  pdf)
+    exec zathura "$arg"
+    ;;
+  png|webp|jpg|jpeg|heic)
+    exec imv "$arg"
+    ;;
+  mp*|ogg|flac|m4v|mkv|avi|mov)
+    exec mpv "$arg"
+    ;;
+  md|markdown|txt|sh)
+    exec alacritty -e vim "$arg"
+    ;;
+  *)
+    echo "xdg-open: don't know how to open '.$ext' ($arg)" >&2
+    exit 1
+    ;;
+esac

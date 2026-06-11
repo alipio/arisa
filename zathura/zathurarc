@@ -1,0 +1,26 @@
+# vim: fdm=marker foldlevel=0
+#{{{ Colors
+include "tokyonight_storm.zathurarc"
+
+set recolor true
+#}}}
+
+#{{{ General
+set adjust-open           width
+set incremental-search    false
+set statusbar-home-tilde  true
+set selection-clipboard   clipboard
+#}}}
+
+#{{{ Scrolling
+set scroll-page-aware "true"
+set smooth-scroll "true"
+set scroll-step 50
+#}}}
+
+#{{{ Key bindings
+map r recolor
+map <C-r> rotate rotate-cw
+map <Space> navigate next
+map <S-Space> navigate previous
+#}}}

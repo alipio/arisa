@@ -1,0 +1,9 @@
+#!/bin/sh
+
+pkill -x wlsunset || true
+
+loc=$(curl -fs -m 2 https://ipinfo.io/loc || echo -23.55,-46.64)
+lat=$(echo "$loc" | cut -f1 -d,)
+lon=$(echo "$loc" | cut -f2 -d,)
+
+wlsunset -l "$lat" -L "$lon"

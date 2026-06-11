@@ -1,0 +1,21 @@
+# vim: ft=dosini fdm=marker foldlevel=0
+
+# Appearance {{{
+font=sans-serif 11
+width=350
+padding=10
+margin=10
+border-size=2
+
+background-color=#1d202f
+text-color=#c0caf5
+border-color=#7aa2f7
+# }}}
+
+default-timeout=5000
+on-button-middle=exec makoctl menu -n "$id" wofi --dmenu -p 'Select action: '
+on-notify=exec mpv /usr/share/sounds/freedesktop/stereo/message.oga
+
+[urgency=high]
+border-color=#f7768e
+ignore-timeout=1

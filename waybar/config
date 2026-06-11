@@ -1,0 +1,76 @@
+{
+  "layer": "top",
+  "position": "top",
+  "modules-left": [
+    "sway/workspaces",
+    "sway/mode"
+  ],
+  "modules-center": ["clock"],
+  "modules-right": [
+    "tray",
+    "pulseaudio",
+    "battery",
+  ],
+  "sway/workspaces": {
+    "on-click": "activate",
+    "format": "{icon}",
+    "format-icons": {
+      "1": "1",
+      "2": "2",
+      "3": "3",
+      "4": "4",
+      "5": "5",
+      "6": "6",
+      "7": "7",
+      "8": "8",
+      "9": "9",
+      "focused": "󱓻",
+      "default": ""
+    }
+  },
+  "clock": {
+    "format": "{:%H:%M %Z :: %a, %b %d %Y}",
+    "tooltip": true,
+    "tooltip-format": "<tt>{calendar}</tt>",
+    "timezone": "America/Sao_Paulo"
+  },
+  "tray": {
+    "icon-size": 20,
+    "spacing": 3
+  },
+  "pulseaudio": {
+    "format": "{volume}% {icon}",
+    "format-bluetooth": "{volume}% {icon}",
+    "format-muted": "󰝟",
+    "format-icons": {
+      "default": [
+        "",
+        "",
+        ""
+      ]
+    },
+    "scroll-step": 2,
+    "on-click": "pactl set-sink-mute @DEFAULT_SINK@ toggle",
+    "on-click-right": "pavucontrol"
+  },
+  "battery": {
+    "format": "{capacity}% {icon}",
+    "format-charging": "{capacity}% ",
+    "format-icons": [
+      "",
+      "",
+      "",
+      "",
+      ""
+    ],
+    "interval": 5,
+    "states": {
+      "warning": 20,
+      "critical": 10
+    },
+    "events": {
+      "on-discharging-warning": "notify-send 'Battery Low (20%)' -u critical -i 'battery-020' -h string:x-canonical-private-synchronous:battery",
+      "on-discharging-critical": "notify-send 'Battery Critical (10%)' -u critical -i 'battery-010' -h string:x-canonical-private-synchronous:battery"
+    }
+  }
+}
