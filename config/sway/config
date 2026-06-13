@@ -12,7 +12,7 @@ set $menu wofi --insensitive --show drun | xargs swaymsg exec --
 
 # Settings {{{
 smart_borders on
-output * bg ~/.dotfiles/sway/bg.jpg fill
+output * bg ~/.dotfiles/assets/bg.jpg fill
 font pango:monospace 10
 default_border pixel 2
 default_floating_border pixel 2

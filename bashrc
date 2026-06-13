@@ -41,8 +41,8 @@ export HISTCONTROL=ignoreboth
 export HISTIGNORE="&:[ ]*:exit:ls:bg:fg:history:clear"
 
 # Custom aliases and functions
-. ~/.dotfiles/shell/bash_functions
-. ~/.dotfiles/shell/bash_aliases
+. ~/.shell/functions.sh
+. ~/.shell/aliases.sh
 
 # Use bash-completion, if available, and avoid double-sourcing
 [[ ! ${BASH_COMPLETION_VERSINFO:-} &&

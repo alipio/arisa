@@ -1,39 +1,26 @@
 - defaults:
-    link:
-      force: true
-      relink: true
-      create: true
+  link:
+    force: true
+    relink: true
+    create: true
 
 - clean: ["~"]
 
 - link:
-  ~/.bash_profile: shell/bash_profile
-  ~/.bashrc: shell/bashrc
-  ~/.config/alacritty/alacritty.toml: alacritty/alacritty.toml
-  ~/.config/alacritty/tokyonight_storm.toml: alacritty/tokyonight_storm.toml
-  ~/.config/fish/config.fish: shell/config.fish
-  ~/.config/fish/themes/tokyonight_storm.theme: shell/tokyonight_storm.theme
-  ~/.config/fontconfig/fonts.conf: fonts.conf
-  ~/.config/gtk-3.0/settings.ini: gtk/settings.ini
-  ~/.config/mako/config: mako/config
-  ~/.config/mpv/fonts: mpv/fonts
-  ~/.config/mpv/input.conf: mpv/input.conf
-  ~/.config/mpv/mpv.conf: mpv/mpv.conf
-  ~/.config/mpv/script-opts: mpv/script-opts
-  ~/.config/mpv/scripts: mpv/scripts
-  ~/.config/nvim: nvim
-  ~/.config/starship.toml: starship.toml
-  ~/.config/sway/config: sway/config
-  ~/.config/swaylock/config: swaylock/config
-  ~/.config/user-dirs.dirs: user-dirs.dirs
-  ~/.config/waybar/config: waybar/config
-  ~/.config/waybar/style.css: waybar/style.css
-  ~/.config/wofi/config: wofi/config
-  ~/.config/wofi/style.css: wofi/style.css
-  ~/.config/xkb: xkb
-  ~/.config/zathura/tokyonight_storm.zathurarc: zathura/tokyonight_storm.zathurarc
-  ~/.config/zathura/zathurarc: zathura/zathurarc
-  ~/.gitconfig: gitconfig
-  ~/.inputrc: shell/inputrc
-  ~/.irbrc: irbrc
-  ~/.vim: vim
+  ~/.config:
+    glob: true
+    path: config/**
+  ~/.shell:
+  ~/.vim:
+  ~/.bash_profile:
+  ~/.bashrc:
+  ~/.gitconfig:
+  ~/.inputrc:
+  ~/.irbrc:
+
+- create:
+  - ~/.config
+
+- shell:
+  - description: Running post-install script (if present)
+    command: [ -x ./post-install ] && ./post-install
