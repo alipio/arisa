@@ -1,26 +1,26 @@
 - defaults:
-  link:
-    force: true
-    relink: true
-    create: true
+    link:
+      force: true
+      relink: true
+      create: true
 
-- clean: ["~"]
+- clean:
+    '~':
+    ~/.config:
+      recursive: true
 
 - link:
-  ~/.config:
-    glob: true
-    path: config/**
-  ~/.shell:
-  ~/.vim:
-  ~/.bash_profile:
-  ~/.bashrc:
-  ~/.gitconfig:
-  ~/.inputrc:
-  ~/.irbrc:
-
-- create:
-  - ~/.config
+    ~/.config:
+      glob: true
+      path: config/**
+    ~/.shell:
+    ~/.vim:
+    ~/.bash_profile:
+    ~/.bashrc:
+    ~/.gitconfig:
+    ~/.inputrc:
+    ~/.irbrc:
 
 - shell:
-  - description: Running post-install script (if present)
-    command: [ -x ./post-install ] && ./post-install
+  - description: Run post-installation script
+    command: 'bash ./post-install.sh'
