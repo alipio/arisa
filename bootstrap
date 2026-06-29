@@ -1,70 +1,82 @@
 #!/usr/bin/env bash
 
+set -Eeo pipefail
+
+C_RED=$'\e[1;31;1m'
+C_GREEN=$'\e[1;32;1m'
+C_YELLOW=$'\e[1;33;1m'
+C_BLUE=$'\e[1;34;1m'
+C_MAGENTA=$'\e[1;35;1m'
+C_CYAN=$'\e[1;36;1m'
+C_WHITE=$'\e[1;37;1m'
+C_RESET=$'\e[0m'
+
 log() {
-  echo "==> $*"
+  local message=$1
+  local pre_message=${2-\n\n}
+  printf "%b%b>> %b%b\n\n" "$pre_message" "$C_CYAN" "$message" "$C_RESET"
 }
 
 die() {
-  echo "ERROR: $*" >&2
+  local message=$1
+  printf "%bERROR: %b%b\n" "$C_RED" "$message" "$C_RESET" >&2
   exit 1
 }
 
-set -Eeo pipefail
-
-TMPDIR=$(mktemp -d) || die "Failed to create temp directory"
-
-trap 'die "Script failed at line $LINENO ($?)"' ERR
-trap 'rm -rf -- "$TMPDIR"' EXIT
-
-cd "$(dirname "${BASH_SOURCE[0]}")"
+trap 'die "Setup failed at line $LINENO ($?)"' ERR
 
 if [[ ! -f /etc/arch-release ]]; then
-  die "This script is designed for Arch Linux only"
+  die "This script is designed for vanilla Arch"
 fi
 
 if ((EUID == 0)); then
-  die "This script must not be run as root"
+  die "This script is not meant to run as root user"
 fi
 
-echo "Checking for sudo access..."
+cat <<EOF
+
+${C_YELLOW}[*] Starting machine setup... This may take a while, go grab
+some coffee now.${C_RESET}
+EOF
+sleep 3
+
+TMP_DIR=$(mktemp -d) || die "Failed to create temp directory"
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+log "Checking if sudo works"
 if ! sudo -Nnv >/dev/null 2>&1; then
   sudo -v || die "It appears that you don't have sudo access"
 fi
 
-echo
-echo "🚀 Starting system setup..."
-echo "This may take a while, grab some coffee and let the script do its thing."
-read -sn 1 -p "Press any key to continue..."; echo
-
+cd "$(dirname "${BASH_SOURCE[0]}")"
 sudo cp ./assets/pacman.conf /etc/pacman.conf
 # shellcheck disable=SC2046
 sudo sed -i 's/^#\?MAKEFLAGS=.*/MAKEFLAGS="-j'$(nproc)'"/' /etc/makepkg.conf
 
-log "Updating system..."
-sudo pacman -Syy --noconfirm archlinux-keyring >/dev/null
+log "Upgrading system"
+sudo pacman -Sy --noconfirm --needed archlinux-keyring
 sudo pacman -Su --noconfirm
 
-log "Installing core deps..."
+log "Installing critical dependencies"
 sudo pacman -S --noconfirm --needed git base-devel wget unzip jq
 
 if ! command -v yay >/dev/null; then
-  log "Installing yay..."
-  git clone -q --depth 1 https://aur.archlinux.org/yay-bin.git "$TMPDIR/yay-bin"
-  (cd "$TMPDIR/yay-bin" && makepkg -si --noconfirm) || die "Failed to install yay"
+  git clone -q --depth 1 https://aur.archlinux.org/yay-bin.git "$TMP_DIR/yay-bin"
+  (cd "$TMP_DIR/yay-bin" && makepkg -si --noconfirm) || die "Failed to install yay"
 fi
 
-log "Installing packages..."
+log "Installing core packages"
 mapfile -t pkgs < <(grep -Ev '^#|^\s*$' ./assets/packagelist)
 sudo pacman -S --needed --noconfirm "${pkgs[@]}"
 
 mapfile -t aurpkgs < <(grep -Ev '^#|^\s*$' ./assets/aurlist)
 yay -S --needed --noconfirm "${aurpkgs[@]}"
 
-log "Enabling system services..."
+log "Enabling system services"
 sudo systemctl -q enable keyd.service
 
-log "Installing GTK theme..."
-dir="$TMPDIR"/tokyonight-gtk
+log "Installing GTK theme"
+dir="$TMP_DIR"/tokyonight-gtk
 git clone -q --depth 1 https://github.com/Fausto-Korpsvart/Tokyonight-GTK-Theme.git "$dir"
 mkdir -p ~/.{themes,icons}
 (
@@ -75,40 +87,43 @@ mkdir -p ~/.{themes,icons}
   gtk-update-icon-cache -ft ~/.icons/Tokyonight-Dark-Cyan 2>/dev/null || true
 ) || die "Theme installation failed."
 
-log "Installing my beloved dotfiles..."
+log "Installing my beloved dotfiles"
 mkdir -p ~/.{config,cache} \
   ~/.local/share \
-  ~/{dl,docs,prj,music,img,videos}
-rm -f ~/.bashrc ~/.bash_{profile,history,logout}
+  ~/{dl,docs,music,img,videos,dev}
+rm -f ~/.bashrc ~/.bash_{history,profile,logout}
+rm -f ~/.viminfo
 ./install
 
-log "Setting up SSH key..."
+log "Setting up Github SSH key"
 if ! command -v bw >/dev/null; then
-  wget -qO "$TMPDIR/bw.zip" "https://bitwarden.com/download/?app=cli&platform=linux"
-  sudo unzip -q "$TMPDIR/bw.zip" bw -d /usr/local/bin
+  wget --no-hsts -qO "$TMP_DIR/bw.zip" "https://bitwarden.com/download/?app=cli&platform=linux"
+  sudo unzip -q "$TMP_DIR/bw.zip" bw -d /usr/local/bin
   sudo chmod +x /usr/local/bin/bw
 fi
 if ! bw login --check >/dev/null 2>&1; then
+  printf "%b%b%b\n" "$C_GREEN" "Please log in to Bitwarden" "$C_RESET"
   BW_SESSION=$(bw login --raw) || die "Failed to log in to Bitwarden"
   export BW_SESSION
 elif ! bw unlock --check >/dev/null 2>&1; then
+  printf "%b%b%b\n" "$C_GREEN" "Please unlock your Bitwarden vault" "$C_RESET"
   BW_SESSION=$(bw unlock --raw) || die "Failed to unlock Bitwarden vault"
   export BW_SESSION
 fi
 bw sync --force
 mkdir -p ~/.ssh
-bw get item main-ssh-key | jq -r .sshKey.privateKey > ~/.ssh/id_ed25519
+bw get item gh_ssh_key | jq -r .sshKey.privateKey > ~/.ssh/id_ed25519
 for host in github.com gitlab.com; do
   ssh-keygen -F "$host" >/dev/null || ssh-keyscan -H "$host" >> ~/.ssh/known_hosts
 done
 [ -f ~/.ssh/config ] || touch ~/.ssh/config
-grep -qxF "AddKeysToAgent yes" ~/.ssh/config || echo "AddKeysToAgent yes" >> ~/.ssh/config
+grep -Fqx "AddKeysToAgent yes" ~/.ssh/config || echo "AddKeysToAgent yes" >> ~/.ssh/config
 chmod 700 ~/.ssh
 chmod 600 ~/.ssh/id_ed25519 ~/.ssh/config
 chmod 644 ~/.ssh/known_hosts
 
 if command -v asdf > /dev/null; then
-  log "Installing the latest Ruby version via asdf..."
+  log "Installing the latest Ruby version via asdf"
   if asdf plugin-list | grep -Fq ruby; then
     asdf plugin update ruby
   else
@@ -122,15 +137,14 @@ if command -v asdf > /dev/null; then
   fi
   gem update --system || true
   [ -f ~/.gemrc ] || touch ~/.gemrc
-  grep -qxF "gem: --no-document" ~/.gemrc || echo "gem: --no-document" >> ~/.gemrc
+  grep -Fqx "gem: --no-document" ~/.gemrc || echo "gem: --no-document" >> ~/.gemrc
   bundle config --global jobs "$(nproc)" >/dev/null 2>&1 || true
 fi
 
-cat <<'EOF'
+cat <<EOF
 
-✅ Setup complete!
+${C_YELLOW}Setup complete! You may need to restart your computer for all changes to take
+effect.
 
-You may need to restart your computer for all changes to take effect.
-
-Have fun! :)
+Have fun! :)${C_RESET}
 EOF
