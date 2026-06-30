@@ -30,7 +30,7 @@ if [[ ! -f /etc/arch-release ]]; then
 fi
 
 if ((EUID == 0)); then
-  die "This script is not meant to run as root user"
+  die "This script is not meant to be run as root"
 fi
 
 cat <<EOF
