@@ -2,28 +2,28 @@
 
 set -Eeo pipefail
 
-C_RED=$'\e[1;31;1m'
-C_GREEN=$'\e[1;32;1m'
-C_YELLOW=$'\e[1;33;1m'
-C_BLUE=$'\e[1;34;1m'
-C_MAGENTA=$'\e[1;35;1m'
-C_CYAN=$'\e[1;36;1m'
-C_WHITE=$'\e[1;37;1m'
-C_RESET=$'\e[0m'
+c_red=$'\e[1;31;1m'
+c_green=$'\e[1;32;1m'
+c_yellow=$'\e[1;33;1m'
+c_blue=$'\e[1;34;1m'
+c_magenta=$'\e[1;35;1m'
+c_cyan=$'\e[1;36;1m'
+c_white=$'\e[1;37;1m'
+c_reset=$'\e[0m'
 
 log() {
   local message=$1
   local pre_message=${2-\n\n}
-  printf "%b%b>> %b%b\n\n" "$pre_message" "$C_CYAN" "$message" "$C_RESET"
+  printf "%b%b>> %b%b\n\n" "$pre_message" "$c_cyan" "$message" "$c_reset"
 }
 
 die() {
   local message=$1
-  printf "%bERROR: %b%b\n" "$C_RED" "$message" "$C_RESET" >&2
+  printf "%bERROR: %b%b\n" "$c_red" "$message" "$c_reset" >&2
   exit 1
 }
 
-trap 'die "Setup failed at line $LINENO ($?)"' ERR
+trap 'die "Bootstrap failed at line $LINENO ($?)"' ERR
 
 if [[ ! -f /etc/arch-release ]]; then
   die "This script is designed for vanilla Arch"
@@ -35,17 +35,17 @@ fi
 
 cat <<EOF
 
-${C_YELLOW}[*] Starting machine setup... This may take a while, go grab
-some coffee now.${C_RESET}
+${c_yellow}[*] Starting ARISA bootstrap... Go grab some coffee, this can take a
+while!${c_reset}
 EOF
 sleep 3
 
-TMP_DIR=$(mktemp -d) || die "Failed to create temp directory"
-trap 'rm -rf "$TMP_DIR"' EXIT
+tmpdir=$(mktemp -d) || die "Failed to create temp directory"
+trap 'rm -rf "$tmpdir"' EXIT
 
 log "Checking if sudo works"
-if ! sudo -Nnv >/dev/null 2>&1; then
-  sudo -v || die "It appears that you don't have sudo access"
+if ! sudo -Nnv 2>/dev/null; then
+  sudo -v || die "It appears that you don't have sudo privileges"
 fi
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -61,8 +61,8 @@ log "Installing critical dependencies"
 sudo pacman -S --noconfirm --needed git base-devel wget unzip jq
 
 if ! command -v yay >/dev/null; then
-  git clone -q --depth 1 https://aur.archlinux.org/yay-bin.git "$TMP_DIR/yay-bin"
-  (cd "$TMP_DIR/yay-bin" && makepkg -si --noconfirm) || die "Failed to install yay"
+  git clone -q --depth 1 https://aur.archlinux.org/yay-bin.git "$tmpdir/yay-bin"
+  (cd "$tmpdir/yay-bin" && makepkg -si --noconfirm) || die "Failed to install yay"
 fi
 
 log "Installing core packages"
@@ -76,7 +76,7 @@ log "Enabling system services"
 sudo systemctl -q enable keyd.service
 
 log "Installing GTK theme"
-dir="$TMP_DIR"/tokyonight-gtk
+dir="$tmpdir"/tokyonight-gtk
 git clone -q --depth 1 https://github.com/Fausto-Korpsvart/Tokyonight-GTK-Theme.git "$dir"
 mkdir -p ~/.{themes,icons}
 (
@@ -97,16 +97,16 @@ rm -f ~/.viminfo
 
 log "Setting up Github SSH key"
 if ! command -v bw >/dev/null; then
-  wget --no-hsts -qO "$TMP_DIR/bw.zip" "https://bitwarden.com/download/?app=cli&platform=linux"
-  sudo unzip -q "$TMP_DIR/bw.zip" bw -d /usr/local/bin
+  wget --no-hsts -qO "$tmpdir/bw.zip" "https://bitwarden.com/download/?app=cli&platform=linux"
+  sudo unzip -q "$tmpdir/bw.zip" bw -d /usr/local/bin
   sudo chmod +x /usr/local/bin/bw
 fi
 if ! bw login --check >/dev/null 2>&1; then
-  printf "%b%b%b\n" "$C_GREEN" "Please log in to Bitwarden" "$C_RESET"
+  printf "%b%b%b\n" "$c_green" "Please log in to Bitwarden" "$c_reset"
   BW_SESSION=$(bw login --raw) || die "Failed to log in to Bitwarden"
   export BW_SESSION
 elif ! bw unlock --check >/dev/null 2>&1; then
-  printf "%b%b%b\n" "$C_GREEN" "Please unlock your Bitwarden vault" "$C_RESET"
+  printf "%b%b%b\n" "$c_green" "Please unlock your Bitwarden vault" "$c_reset"
   BW_SESSION=$(bw unlock --raw) || die "Failed to unlock Bitwarden vault"
   export BW_SESSION
 fi
@@ -122,17 +122,17 @@ chmod 700 ~/.ssh
 chmod 600 ~/.ssh/id_ed25519 ~/.ssh/config
 chmod 644 ~/.ssh/known_hosts
 
-if command -v asdf > /dev/null; then
+if command -v asdf >/dev/null; then
   log "Installing the latest Ruby version via asdf"
   if asdf plugin-list | grep -Fq ruby; then
     asdf plugin update ruby
   else
     asdf plugin add ruby
   fi
-  ruby_latest_version=$(asdf latest ruby)
-  if ! asdf list ruby | grep -Fq "$ruby_latest_version"; then
-    asdf install ruby "$ruby_latest_version"
-    asdf set -u ruby "$ruby_latest_version"
+  ruby_latest=$(asdf latest ruby)
+  if ! asdf list ruby | grep -Fq "$ruby_latest"; then
+    asdf install ruby "$ruby_latest"
+    asdf set -u ruby "$ruby_latest"
     asdf reshim ruby
   fi
   gem update --system || true
@@ -143,8 +143,8 @@ fi
 
 cat <<EOF
 
-${C_YELLOW}Setup complete! You may need to restart your computer for all changes to take
+${c_yellow}Bootstrap complete! You may need to restart your computer for all changes to take
 effect.
 
-Have fun! :)${C_RESET}
+Have fun! :)${c_reset}
 EOF
