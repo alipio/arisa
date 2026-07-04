@@ -13,7 +13,7 @@ c_reset=$'\e[0m'
 
 log() {
   local message=$1
-  local pre_message=${2-\n\n}
+  local pre_message="${2-\n\n}"
   printf "%b%b>> %b%b\n\n" "$pre_message" "$c_cyan" "$message" "$c_reset"
 }
 
@@ -40,7 +40,7 @@ while!${c_reset}
 EOF
 sleep 3
 
-tmpdir=$(mktemp -d) || die "Failed to create temp directory"
+tmpdir=$(mktemp -d arisa.XXXXXX) || die "Failed to create temp directory"
 trap 'rm -rf "$tmpdir"' EXIT
 
 log "Checking if sudo works"
