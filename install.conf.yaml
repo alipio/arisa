@@ -22,5 +22,5 @@
     ~/.irbrc:
 
 - shell:
-  - description: Run post-installation script
+  - description: Running the post-install script
     command: 'bash ./post-install.sh'
