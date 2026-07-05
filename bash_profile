@@ -46,7 +46,7 @@ path_prepend() {
 path_prepend "$HOME/.local/bin" "$HOME/.dotfiles/bin" "$HOME/.asdf/shims"
 
 if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-  exec ssh-agent sway > /var/log/sway.log 2>&1
+  exec ssh-agent sway > ~/.cache/sway.log 2>&1
 fi
 
 [[ -f ~/.bashrc ]] && . ~/.bashrc
