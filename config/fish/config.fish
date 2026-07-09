@@ -13,7 +13,7 @@ alias open='xdg-open'
 alias pacman='sudo pacman'
 alias sctl='sudo systemctl'
 alias se='sudoedit'
-alias vim='nvim'
+# alias vim='nvim'
 alias xt='extract'
 
 alias g='git'
